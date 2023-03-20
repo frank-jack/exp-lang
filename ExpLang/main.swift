@@ -33,7 +33,23 @@ struct Function {
 }
 
 func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]) -> String {
-    if code.contains("\"") { //Cannot have statements without ""
+    var isFloatExpression = false
+    if !code.contains("\"") {
+        if code.contains("-") || code.contains("*") || code.contains("/") || code.contains("(") || code.contains(")") {
+            isFloatExpression = true
+        } 
+        if code.contains("+") {
+            let splitByPlus = code.components(separatedBy: "+")
+            for i in splitByPlus {
+                if !i.isNumber {
+                    if getType(variable: getValue(variable: i, space: space) as! String) == TypeValue.Float {
+                        isFloatExpression = true
+                    }
+                }
+            }
+        }
+    }
+    if code.contains("\"") || !isFloatExpression { //Cannot have statements without ""
         var inQ = false
         var tempVarName = ""
         var trueCode = ""
@@ -48,7 +64,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
             }
             if i == "\"" || i == "+" || inQ || i == code[code.count-1] {
                 if tempVarName.count > 0 {
-                    trueCode+=getValue(variable: tempVarName, space: space) as! String
+                    trueCode+=getValue(variable: tempVarName, space: space)
                     tempVarName = ""
                 } else {
                     trueCode+=String(i)
@@ -175,7 +191,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
             expression.append("/")
         }
     }
-    //print(expression)
+    print(expression)
     for i in 0...expression.count-1 {
         if expression[i] == "*" {
             expression[i+1] = String(Float(expression[i-1])!*Float(expression[i+1])!)
@@ -203,9 +219,9 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
     return expression[0]
 }
 
-func getValue(variable: String, space: [(name: String, value: Any, type: TypeValue)]) -> Any {
+func getValue(variable: String, space: [(name: String, value: Any, type: TypeValue)]) -> String {
     if let value = space.first(where: {variable == $0.name})?.value {
-        return value
+        return (value as AnyObject).description
     } else {
         return "very bad"
     }
@@ -345,7 +361,7 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) {
             //print(funcParam)
             for i in funcParam {
                 if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace)) == TypeValue.String {
-                    localSpace.append((name: String(i.components(separatedBy: ":")[0]), value: i.components(separatedBy: ":")[1], type: TypeValue.String))
+                    localSpace.append((name: String(i.components(separatedBy: ":")[0]), value: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace), type: TypeValue.String))
                 } else if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace)) == TypeValue.Float {
                     localSpace.append((name: i.components(separatedBy: ":")[0], value: Float(evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace))!, type: TypeValue.Float))
                 }
@@ -360,6 +376,9 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) {
                 }
             }
             if paramsValid {
+                for i in currentSpace {
+                    localSpace.append(i)
+                }
                 run(code: functionValue.code, space: localSpace)
             }
         }
@@ -368,13 +387,13 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) {
 }
 
 var code = """
-function do(a: Float, b: String) {
-print(a*a);
-print(b+b+"");
+var z = (((9+8)*43)-9.4*(5+4))+6.1;
+print(z);
+function hi(a: String) {
+print(a+a);
 };
-var o = "uiop";
-var d = 8*(1+90);
-do(a:d,b:"uiop");
+var b = "hello";
+hi(a:b);
 """
 run(code: code, space: globalSpace)
 
