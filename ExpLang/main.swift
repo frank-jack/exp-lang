@@ -37,6 +37,167 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
     if code.replacingOccurrences(of: " ", with: "") == "true" || code.replacingOccurrences(of: " ", with: "") == "false" {
         return String(code.replacingOccurrences(of: " ", with: ""))
     }
+    if code.contains("<") || code.contains(">") || code.contains("==") || code.contains("!=") || code.contains("||") || code.contains("&&") {
+        var parenIds = [Int]()
+        var valIds = [Int]()
+        var orIds = [Int]()
+        var andIds = [Int]()
+        var depth = 0
+        var depthChanged = false
+        for i in 0...code.count-1 {
+            if code[i] == "(" {
+                if depth > 0 {
+                    parenIds.append(i)
+                }
+                depth+=1
+                depthChanged = true
+            } else if code[i] == ")" {
+                if depth > 0 && depthChanged {
+                    parenIds.append(i)
+                }
+                depth-=1
+            } else if depth > 0 {
+                parenIds.append(i)
+            } else if depth == 0 && code[i] == "&" && code[i+1] == "&" {
+                andIds.append(i)
+            } else if depth == 0 && code[i] == "|" && code[i+1] == "|" {
+                orIds.append(i)
+            } else if code[i] != " " && code[i] != ">" && code[i] != "<" && code[i] != "=" && code[i] != "!" && code[i] != "|" && code[i] != "&" && depth == 0 {
+                valIds.append(i)
+            }
+        }
+        var parens = [String]()
+        var parenIdsUsed = [Int]()
+        for i in parenIds {
+            if !parenIdsUsed.contains(i) {
+                var index = i
+                var paren = ""
+                while parenIds.contains(index) {
+                    paren+=String(code[index])
+                    index+=1
+                    parenIdsUsed.append(index)
+                }
+                parens.append(paren)
+            }
+        }
+        var vals = [String]()
+        var valIdsUsed = [Int]()
+        for i in valIds {
+            if !valIdsUsed.contains(i) {
+                var index = i
+                var val = ""
+                while valIds.contains(index) {
+                    val+=String(code[index])
+                    index+=1
+                    valIdsUsed.append(index)
+                }
+                vals.append(val)
+            }
+        }
+        var expression = [String]()
+        var parenCount = 0
+        var valCount = 0
+        for i in 0...code.count-1 {
+            if parenIds.contains(i) && !parenIdsUsed.contains(i) {
+                expression.append(evaluate(code: parens[parenCount], space: space))
+                parenCount+=1
+            } else if valIds.contains(i) && !valIdsUsed.contains(i) && !parenIds.contains(i) {
+                expression.append(evaluate(code: vals[valCount], space: space))
+                valCount+=1
+            } else if code[i] == ">" && code[i+1] == "=" && !parenIds.contains(i) {
+                expression.append(">=")
+            } else if code[i] == "<" && code[i+1] == "=" && !parenIds.contains(i) {
+                expression.append("<=")
+            } else if code[i] == ">" && !parenIds.contains(i) {
+                expression.append(">")
+            } else if code[i] == "<" && !parenIds.contains(i) {
+                expression.append("<")
+            } else if code[i] == "=" && code[i+1] == "=" && !parenIds.contains(i) {
+                expression.append("==")
+            } else if code[i] == "!" && code[i+1] == "=" && !parenIds.contains(i) {
+                expression.append("!=")
+            } else if orIds.contains(i) {
+                expression.append("||")
+            } else if andIds.contains(i) {
+                expression.append("&&")
+            }
+        }
+        for i in 0...expression.count-1 {
+            if expression[i] == "<" {
+                if expression[i-1] < expression[i+1] {
+                    expression[i] = "true"
+                } else {
+                    expression[i] = "false"
+                }
+                expression[i-1] = ""
+                expression[i+1] = ""
+            } else if expression[i] == ">" {
+                if expression[i-1] > expression[i+1] {
+                    expression[i] = "true"
+                } else {
+                    expression[i] = "false"
+                }
+                expression[i-1] = ""
+                expression[i+1] = ""
+            } else if expression[i] == "==" {
+                if expression[i-1] == expression[i+1] {
+                    expression[i] = "true"
+                } else {
+                    expression[i] = "false"
+                }
+                expression[i-1] = ""
+                expression[i+1] = ""
+            } else if expression[i] == "<=" {
+                if expression[i-1] <= expression[i+1] {
+                    expression[i] = "true"
+                } else {
+                    expression[i] = "false"
+                }
+                expression[i-1] = ""
+                expression[i+1] = ""
+            } else if expression[i] == ">=" {
+                if expression[i-1] >= expression[i+1] {
+                    expression[i] = "true"
+                } else {
+                    expression[i] = "false"
+                }
+                expression[i-1] = ""
+                expression[i+1] = ""
+            } else if expression[i] == "!=" {
+                if expression[i-1] != expression[i+1] {
+                    expression[i] = "true"
+                } else {
+                    expression[i] = "false"
+                }
+                expression[i-1] = ""
+                expression[i+1] = ""
+            }
+        }
+        expression.removeAll { $0 == "" }
+        while expression.count != 1 {
+            for i in 0...expression.count-1 {
+                if i <= expression.count-1 && expression[i] == "||" {
+                    if expression[i-1] == "true" || expression[i+1] == "true" {
+                        expression[i] = "true"
+                    } else {
+                        expression[i] = "false"
+                    }
+                    expression[i-1] = ""
+                    expression[i+1] = ""
+                } else if i <= expression.count-1 && expression[i] == "&&" {
+                    if expression[i-1] == "true" && expression[i+1] == "true" {
+                        expression[i] = "true"
+                    } else {
+                        expression[i] = "false"
+                    }
+                    expression[i-1] = ""
+                    expression[i+1] = ""
+                }
+                expression.removeAll { $0 == "" }
+            }
+        }
+        return expression[0]
+    }
     if !code.contains("\"") && !code.contains("+") && !code.contains("-") && !code.contains("*") && !code.contains("/") && !code.contains("(") && !code.contains(")") && !code.isNumber && getType(variable: getValue(variable: code, space: space)) == TypeValue.Boolean {
         return evaluate(code: getValue(variable: code.replacingOccurrences(of: " ", with: ""), space: space), space: space)
     }
@@ -44,7 +205,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
         return code.replacingOccurrences(of: " ", with: "")
     } else if !code.contains("\"") && !code.contains("-") && !code.contains("*") && !code.contains("/") && !code.contains("(") && !code.contains(")") {
         var simpleAdds: Float = 0.0
-        var splitByPlus = code.components(separatedBy: "+")
+        let splitByPlus = code.components(separatedBy: "+")
         var allNumbers = true
         for i in splitByPlus {
             if i.replacingOccurrences(of: " ", with: "").isNumber {
@@ -420,16 +581,38 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) {
                 }
                 run(code: functionValue.code, space: localSpace)
             }
+        } else if set.replacingOccurrences(of: " ", with: "").hasPrefix("if(") && getType(variable: evaluate(code: String(set.replacingOccurrences(of: " ", with: "").dropFirst(3).components(separatedBy: "{")[0].dropLast(1)), space: currentSpace)) == TypeValue.Boolean {
+            var finished = false
+            if evaluate(code: String(set.replacingOccurrences(of: " ", with: "").dropFirst(3).components(separatedBy: "{")[0].dropLast(1)), space: currentSpace) == "true" {
+                run(code: brackets[bracketCount], space: currentSpace)
+                bracketCount+=1
+                finished = true
+            } else {
+                bracketCount+=1
+                if set.contains("elif") {
+                    for i in 1...set.components(separatedBy: "elif").count-1 {
+                        if !finished && evaluate(code: String(set.replacingOccurrences(of: " ", with: "").components(separatedBy: "elif")[i].dropFirst(1).components(separatedBy: "{")[0].dropLast(1)), space: currentSpace) == "true" {
+                            run(code: brackets[bracketCount], space: currentSpace)
+                            bracketCount+=1
+                            finished = true
+                        } else {
+                            bracketCount+=1
+                        }
+                    }
+                }
+                if set.contains("else") && !finished {
+                    run(code: brackets[bracketCount], space: currentSpace)
+                    bracketCount+=1
+                }
+            }
         }
     }
     //print(currentSpace)
 }
 
 var code = """
-var isShowing = true;
-function hi(b: Boolean) {
-print(b);
+if(true) {
+print(1);
 };
-hi(b: isShowing);
 """
 run(code: code, space: globalSpace)
