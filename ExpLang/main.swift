@@ -234,7 +234,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
             }
         }
     }
-    if code.contains("\"") || !isFloatExpression { //Cannot have statements without ""
+    if code.contains("\"") || !isFloatExpression {
         var inQ = false
         var tempVarName = ""
         var trueCode = ""
@@ -376,7 +376,6 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
             expression.append("/")
         }
     }
-    //print(expression)
     for i in 0...expression.count-1 {
         if expression[i] == "*" {
             expression[i+1] = String(Float(expression[i-1])!*Float(expression[i+1])!)
@@ -500,8 +499,6 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) {
             codeWithoutBrackets+=String(code[i])
         }
     }
-    //print(brackets)
-    //print(bracketIds)
     var bracketCount = 0
     let simpleCode = codeWithoutBrackets.replacingOccurrences(of: "\n", with: "")
     let sets = simpleCode.components(separatedBy: ";")
@@ -556,7 +553,6 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) {
             var localSpace = [(name: String, value: Any, type: TypeValue)]()
             let funcName = set.replacingOccurrences(of: " ", with: "").components(separatedBy: "(")[0]
             let funcParam = set.replacingOccurrences(of: " ", with: "").dropLast(1).components(separatedBy: "(")[1].components(separatedBy: ",")
-            //print(funcParam)
             for i in funcParam {
                 if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace)) == TypeValue.String {
                     localSpace.append((name: String(i.components(separatedBy: ":")[0]), value: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace), type: TypeValue.String))
@@ -567,8 +563,6 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) {
                 }
             }
             let functionValue = getFunction(funcName: funcName, space: currentSpace)
-            //print(functionValue.params)
-            //print(localSpace)
             var paramsValid = true
             for i in 0...functionValue.params.count-1 {
                 if functionValue.params[i].name != localSpace[i].name || functionValue.params[i].type != localSpace[i].type {
@@ -607,12 +601,8 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) {
             }
         }
     }
-    //print(currentSpace)
 }
 
 var code = """
-if(true) {
-print(1);
-};
 """
 run(code: code, space: globalSpace)
