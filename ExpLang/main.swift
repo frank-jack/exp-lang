@@ -38,8 +38,25 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
     if getVarNames(space: space).contains(code) {
         return evaluate(code: getValue(variable: code, space: space), space: space)
     }
-    if code.components(separatedBy: "[").count == 2 && code.components(separatedBy: "]").count == 2 && code.replacingOccurrences(of: " ", with: "")[0] == "[" && code.replacingOccurrences(of: " ", with: "")[code.replacingOccurrences(of: " ", with: "").count-1] == "]"{
-        var arrayItems = code.replacingOccurrences(of: " ", with: "").dropFirst(1).dropLast(1).components(separatedBy: ",")
+    if code.replacingOccurrences(of: " ", with: "")[0] == "[" && code.replacingOccurrences(of: " ", with: "")[code.replacingOccurrences(of: " ", with: "").count-1] == "]" {
+        var editedCode = ""
+        var depth = 0
+        for i in 0...code.count-1 {
+            if code[i] == "[" {
+                depth+=1
+            } else if code[i] == "]" {
+                depth-=1
+            }
+            if code[i] == "," && depth > 1 {
+                editedCode+="\0"
+            } else {
+                editedCode+=String(code[i])
+            }
+        }
+        var arrayItems = editedCode.replacingOccurrences(of: " ", with: "").dropFirst(1).dropLast(1).components(separatedBy: ",")
+        for i in 0...arrayItems.count-1 {
+            arrayItems[i] = arrayItems[i].replacingOccurrences(of: "\0", with: ",")
+        }
         for i in 0...arrayItems.count-1 {
             arrayItems[i] = evaluate(code: arrayItems[i], space: space)
         }
@@ -53,6 +70,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
         output+="]"
         return output
     }
+    //Needs Fixing
     if (code.components(separatedBy: "[").count > 2 && code.components(separatedBy: "]").count > 2) || (code.contains("[") && getType(variable: evaluate(code: code.components(separatedBy: "[")[0].replacingOccurrences(of: " ", with: ""), space: space)) == TypeValue.Array) {
         if code.components(separatedBy: "[").count > 2 && code.components(separatedBy: "]").count > 2 {
             let evaluatedArray = evaluate(code: code.components(separatedBy: "]")[0]+"]", space: space)
@@ -658,7 +676,10 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) {
 }
 
 var code = """
-var arr = ["jejej",[1+2,"jwj"]][1];
+var arr = ["jejej", [1+2, "ejeje"], 1+3];
 print(arr);
-""" //missing higher dimensional array functionality
+"""
+//missing ability to find things in array
+//can't have numbers begin with - i.e. -1 does not work
+//replacingOccurences currently will remove spaces within Strings "ekeke kekke" so need to write function that does the same thing if not within ""
 run(code: code, space: globalSpace)
