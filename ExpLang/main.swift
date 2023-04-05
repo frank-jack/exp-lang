@@ -9,7 +9,7 @@ import Foundation
 
 extension String {
     var isNumber: Bool {
-        let digitsCharacters = CharacterSet(charactersIn: ".0123456789")
+        let digitsCharacters = CharacterSet(charactersIn: ".0123456789-")
         return CharacterSet(charactersIn: self).isSubset(of: digitsCharacters)
     }
 }
@@ -432,6 +432,9 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
         }
     }
     expression.removeAll { $0 == "" }
+    if expression[0] == "-" {
+        expression = ["0"] + expression
+    }
     for i in 0...expression.count-1 {
         if expression[i] == "+" {
             expression[i+1] = String(Float(expression[i-1])!+Float(expression[i+1])!)
@@ -676,10 +679,17 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) {
 }
 
 var code = """
-var arr = ["jejej", [1+2, "ejeje"], 1+3];
-print(arr);
+function addNumbers(a: Float, b: Float, work: Boolean) {
+if(work) {
+print(a+b);
+} else {
+print("Nor");
+};
+};
+addNumbers(a: 4, b: -3, work: true);
 """
 //missing ability to find things in array
-//can't have numbers begin with - i.e. -1 does not work
 //replacingOccurences currently will remove spaces within Strings "ekeke kekke" so need to write function that does the same thing if not within ""
 run(code: code, space: globalSpace)
+
+
