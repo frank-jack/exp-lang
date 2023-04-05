@@ -53,6 +53,95 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
     if getVarNames(space: space).contains(code) {
         return evaluate(code: getValue(variable: code, space: space), space: space)
     }
+    if code.contains("[") && code.contains("]") && getVarNames(space: space).contains(code.customReplace().components(separatedBy: "[")[0]) && getType(variable: evaluate(code: code.customReplace().components(separatedBy: "[")[0], space: space)) == TypeValue.Array {
+        var arr = evaluate(code: code.customReplace().components(separatedBy: "[")[0], space: space)
+        var finished = false
+        var count = 1
+        while !finished {
+            var editedCode = ""
+            var depth = 0
+            for i in 0...arr.count-1 {
+                if arr[i] == "[" {
+                    depth+=1
+                } else if arr[i] == "]" {
+                    depth-=1
+                }
+                if arr[i] == "," && depth > 1 {
+                    editedCode+="\0"
+                } else {
+                    editedCode+=String(arr[i])
+                }
+            }
+            var arrayItems = editedCode.customReplace().dropFirst(1).dropLast(1).components(separatedBy: ",")
+            for i in 0...arrayItems.count-1 {
+                arrayItems[i] = arrayItems[i].replacingOccurrences(of: "\0", with: ",")
+            }
+            if getType(variable: evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space)) != TypeValue.Array || count == code.components(separatedBy: "[").count-1 {
+                finished = true
+                return evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space)
+            } else {
+                arr = evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space)
+                count+=1
+            }
+        }
+    }
+    if code.components(separatedBy: "[").count-1 > 2 && code.components(separatedBy: "]").count-1 > 2 && code.customReplace()[0] == "[" {
+        var leftBrackets = 0
+        var depth = 0
+        var stop = 0
+        for i in 0...code.count-1 {
+            if depth == 0 {
+                stop+=1
+            }
+            if stop != 2 {
+                if code[i] == "[" {
+                    depth+=1
+                    leftBrackets+=1
+                } else if code[i] == "]" {
+                    depth-=1
+                }
+            }
+        }
+        var splitByBrackets = code.customReplace().components(separatedBy: "[")
+        var arr = ""
+        for i in 0...leftBrackets {
+            if i == 0 {
+                arr+=splitByBrackets[i]
+            } else {
+                arr+="["+splitByBrackets[i]
+            }
+        }
+        arr = evaluate(code: arr, space: space)
+        var finished = false
+        var count = leftBrackets+1
+        while !finished {
+            var editedCode = ""
+            var depth = 0
+            for i in 0...arr.count-1 {
+                if arr[i] == "[" {
+                    depth+=1
+                } else if arr[i] == "]" {
+                    depth-=1
+                }
+                if arr[i] == "," && depth > 1 {
+                    editedCode+="\0"
+                } else {
+                    editedCode+=String(arr[i])
+                }
+            }
+            var arrayItems = editedCode.customReplace().dropFirst(1).dropLast(1).components(separatedBy: ",")
+            for i in 0...arrayItems.count-1 {
+                arrayItems[i] = arrayItems[i].replacingOccurrences(of: "\0", with: ",")
+            }
+            if getType(variable: evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space)) != TypeValue.Array || count == code.components(separatedBy: "[").count-1 {
+                finished = true
+                return evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space)
+            } else {
+                arr = evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space)
+                count+=1
+            }
+        }
+    }
     if code.customReplace()[0] == "[" && code.customReplace()[code.customReplace().count-1] == "]" {
         var editedCode = ""
         var depth = 0
@@ -84,20 +173,6 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
         }
         output+="]"
         return output
-    }
-    //Needs Fixing
-    if (code.components(separatedBy: "[").count > 2 && code.components(separatedBy: "]").count > 2) || (code.contains("[") && getType(variable: evaluate(code: code.components(separatedBy: "[")[0].customReplace(), space: space)) == TypeValue.Array) {
-        if code.components(separatedBy: "[").count > 2 && code.components(separatedBy: "]").count > 2 {
-            let evaluatedArray = evaluate(code: code.components(separatedBy: "]")[0]+"]", space: space)
-            let arrayItems = evaluatedArray.customReplace().dropFirst(1).dropLast(1).components(separatedBy: ",")
-            let index = Int(evaluate(code: String(code.customReplace().components(separatedBy: "]")[1].dropFirst(1)), space: space))!
-            return arrayItems[index]
-        } else {
-            let evaluatedArray = evaluate(code: code.components(separatedBy: "[")[0].customReplace(), space: space)
-            let arrayItems = evaluatedArray.customReplace().dropFirst(1).dropLast(1).components(separatedBy: ",")
-            let index = Int(evaluate(code: String(code.customReplace().components(separatedBy: "[")[1].dropLast(1)), space: space))!
-            return arrayItems[index]
-        }
     }
     if code.customReplace() == "true" || code.customReplace() == "false" {
         return String(code.customReplace())
@@ -694,19 +769,8 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) {
 }
 
 var code = """
-function addNumbers(a: Float, b: Float, work: Boolean) {
-if(work) {
-print(a+b);
-} else {
-print("Nor");
-};
-};
-addNumbers(a: 4, b: -3, work: true);
-if("ekeke kekke" == "ekeke kekke") {
-print("hi");
-print(["hehe eheh"]);
-};
+var arr = ["ieie",[99, "pepe"],1+2];
+print(arr[1][0]);
+print(["ieie",[99, "pepe"],1+2][1][1]);
 """
-//missing ability to find things in array
-//replacingOccurences currently will remove spaces within Strings "ekeke kekke" if in Boolean expression so need to write function that does the same thing if not within ""
 run(code: code, space: globalSpace)
