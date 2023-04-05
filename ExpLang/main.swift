@@ -85,24 +85,24 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
             }
         }
     }
-    if code.components(separatedBy: "[").count-1 > 2 && code.components(separatedBy: "]").count-1 > 2 && code.customReplace()[0] == "[" {
+    if code.components(separatedBy: "[").count-1 > 2 && code.components(separatedBy: "]").count-1 > 2 && code.customReplace()[0] == "[" && (Int(code.customReplace().components(separatedBy: "[")[code.customReplace().components(separatedBy: "[").count-1].dropLast(1)) != nil) {
         var leftBrackets = 0
         var depth = 0
         var stop = 0
-        for i in 0...code.count-1 {
+        for i in 0...code.customReplace().count-1 {
             if depth == 0 {
                 stop+=1
             }
-            if stop != 2 {
-                if code[i] == "[" {
+            if stop < 2 {
+                if code.customReplace()[i] == "[" {
                     depth+=1
                     leftBrackets+=1
-                } else if code[i] == "]" {
+                } else if code.customReplace()[i] == "]" {
                     depth-=1
                 }
             }
         }
-        var splitByBrackets = code.customReplace().components(separatedBy: "[")
+        let splitByBrackets = code.customReplace().components(separatedBy: "[")
         var arr = ""
         for i in 0...leftBrackets {
             if i == 0 {
@@ -769,8 +769,10 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) {
 }
 
 var code = """
-var arr = ["ieie",[99, "pepe"],1+2];
-print(arr[1][0]);
-print(["ieie",[99, "pepe"],1+2][1][1]);
+var arr = ["ieie",[[99,"ejeje",true], "pepe"],1+2];
+print(arr[1][0][2]);
+print(["ieie",[[99,"ejeje",true], "pepe"],1+2][1][0][2]);
 """
+//Need to be able to set values of array
+//Add other array functions (append, remove)
 run(code: code, space: globalSpace)
