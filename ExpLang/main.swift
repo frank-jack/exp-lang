@@ -50,8 +50,14 @@ struct Function {
 }
 
 func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]) -> String {
+    if code.replacingOccurrences(of: " ", with: "").count == 0 {
+        return ""
+    }
     if getVarNames(space: space).contains(code) {
         return evaluate(code: getValue(variable: code, space: space), space: space)
+    }
+    if code.components(separatedBy: "[").count-1 == 1 && code.components(separatedBy: "]").count-1 == 1 && getType(variable: evaluate(code: code.customReplace().components(separatedBy: "[")[0], space: space)) == TypeValue.String {
+        return "\""+String(evaluate(code: code.customReplace().components(separatedBy: "[")[0], space: space)[Int(code.components(separatedBy: "[")[1].dropLast(1))!+1])+"\""
     }
     if code.contains("[") && code.contains("]") && getVarNames(space: space).contains(code.customReplace().components(separatedBy: "[")[0]) && getType(variable: evaluate(code: code.customReplace().components(separatedBy: "[")[0], space: space)) == TypeValue.Array {
         var arr = evaluate(code: code.customReplace().components(separatedBy: "[")[0], space: space)
@@ -772,6 +778,9 @@ var code = """
 var arr = ["ieie",[[99,"ejeje",true], "pepe"],1+2];
 print(arr[1][0][2]);
 print(["ieie",[[99,"ejeje",true], "pepe"],1+2][1][0][2]);
+print("steh"[3]);
+var str = "jeje";
+print(str[3]);
 """
 //Need to be able to set values of array
 //Add other array functions (append, remove)
