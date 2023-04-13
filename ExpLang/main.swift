@@ -546,6 +546,53 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
     return expression[0]
 }
 
+func arrayReplaceHelper(arr: String, indexList: [Int], count: Int, newValue: String) -> String {
+    var editedCode = ""
+    var depth = 0
+    for i in 0...arr.count-1 {
+        if arr[i] == "[" {
+            depth+=1
+        } else if arr[i] == "]" {
+            depth-=1
+        }
+        if arr[i] == "," && depth > 1 {
+            editedCode+="\0"
+        } else {
+            editedCode+=String(arr[i])
+        }
+    }
+    var arrayItems = editedCode.customReplace().dropFirst(1).dropLast(1).components(separatedBy: ",")
+    for i in 0...arrayItems.count-1 {
+        arrayItems[i] = arrayItems[i].replacingOccurrences(of: "\0", with: ",")
+    }
+    var output = ""
+    if count == indexList.count-1 {
+        for i in 0...arrayItems.count-1 {
+            if i != 0 {
+                output+=","
+            }
+            if i == indexList[count] {
+                output+=newValue
+            } else {
+                output+=arrayItems[i]
+            }
+        }
+        return "["+output+"]"
+    } else {
+        for i in 0...arrayItems.count-1 {
+            if i != 0 {
+                output+=","
+            }
+            if i == indexList[count] {
+                output+=arrayReplaceHelper(arr: arrayItems[i], indexList: indexList, count: count+1, newValue: newValue)
+            } else {
+                output+=arrayItems[i]
+            }
+        }
+        return "["+output+"]"
+    }
+}
+
 func getValue(variable: String, space: [(name: String, value: Any, type: TypeValue)]) -> String {
     if let value = space.first(where: {variable == $0.name})?.value {
         if space.first(where: {variable == $0.name})?.type == TypeValue.String {
@@ -770,18 +817,48 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) {
                     bracketCount+=1
                 }
             }
+        } else if getVarNames(space: currentSpace).contains(where: set.customReplace().components(separatedBy: "[")[0].hasPrefix) {
+            if getType(variable: evaluate(code: set.customReplace().components(separatedBy: "[")[0], space: currentSpace)) == TypeValue.String {
+                let oldValue = evaluate(code: set.customReplace().components(separatedBy: "[")[0], space: currentSpace).dropFirst(1).dropLast(1)
+                let index = Int(evaluate(code: String(set.customReplace().components(separatedBy: "=")[0].components(separatedBy: "[")[1].dropLast(1)), space: currentSpace))!
+                var newValue = ""
+                for i in 0...oldValue.count-1 {
+                    if i != index {
+                        newValue+=String(oldValue[i])
+                    } else {
+                        newValue+=evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).dropFirst(1).dropLast(1)
+                    }
+                }
+                let variable = set.components(separatedBy: "[")[0].customReplace()
+                currentSpace = updateValue(variable: variable, newValue: newValue, space: currentSpace)
+            } else if getType(variable: evaluate(code: set.customReplace().components(separatedBy: "[")[0], space: currentSpace)) == TypeValue.Array {
+                let layers = set.customReplace().components(separatedBy: "=")[0].components(separatedBy: "[").count-1
+                var indexList = set.customReplace().components(separatedBy: "=")[0].components(separatedBy: "[")
+                indexList.remove(at: 0)
+                for i in 0...indexList.count-1 {
+                    indexList[i] = String(indexList[i].dropLast(1))
+                }
+                var intIndexList = [Int]()
+                for i in indexList {
+                    intIndexList.append(Int(i)!)
+                }
+                let arr = evaluate(code: set.customReplace().components(separatedBy: "[")[0], space: currentSpace)
+                let newValue = arrayReplaceHelper(arr: arr, indexList: intIndexList, count: 0, newValue: String(evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace)))
+                let variable = set.components(separatedBy: "[")[0].customReplace()
+                currentSpace = updateValue(variable: variable, newValue: newValue, space: currentSpace)
+            }
         }
     }
 }
 
 var code = """
-var arr = ["ieie",[[99,"ejeje",true], "pepe"],1+2];
-print(arr[1][0][2]);
-print(["ieie",[[99,"ejeje",true], "pepe"],1+2][1][0][2]);
-print("steh"[3]);
-var str = "jeje";
-print(str[3]);
+var d = [3,4];
+d[0] = 4*6;
+print(d);
+var o = [1+2,["jeje",3*5],5,[true, [false]]];
+o[3] = ["dndn",false];
+print(o);
 """
-//Need to be able to set values of array
 //Add other array functions (append, remove)
+//for loops/while loops
 run(code: code, space: globalSpace)
