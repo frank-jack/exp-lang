@@ -183,6 +183,19 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
     if code.customReplace() == "true" || code.customReplace() == "false" {
         return String(code.customReplace())
     }
+    if code.customReplace() == "!true" {
+        return "false"
+    }
+    if code.customReplace() == "!false" {
+        return "true"
+    }
+    if code.customReplace()[0] == "!" && getType(variable: evaluate(code: String(code.customReplace().dropFirst(1)), space: space)) == TypeValue.Boolean && getVarNames(space: space).contains(String(code.customReplace().dropFirst(1))) {
+        if evaluate(code: String(code.customReplace().dropFirst(1)), space: space) == "true" {
+            return "false"
+        } else if evaluate(code: String(code.customReplace().dropFirst(1)), space: space) == "false" {
+            return "true"
+        }
+    }
     if code.contains("<") || code.contains(">") || code.contains("==") || code.contains("!=") || code.contains("||") || code.contains("&&") {
         var parenIds = [Int]()
         var valIds = [Int]()
@@ -208,7 +221,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
                 andIds.append(i)
             } else if depth == 0 && code[i] == "|" && code[i+1] == "|" {
                 orIds.append(i)
-            } else if code[i] != ">" && code[i] != "<" && code[i] != "=" && code[i] != "!" && code[i] != "|" && code[i] != "&" && depth == 0 {
+            } else if code[i] != ">" && code[i] != "<" && code[i] != "=" && !(code[i] == "!" && code[i+1] == "=") && code[i] != "|" && code[i] != "&" && depth == 0 {
                 valIds.append(i)
             }
         }
@@ -243,6 +256,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
         var expression = [String]()
         var parenCount = 0
         var valCount = 0
+        print(vals)
         for i in 0...code.count-1 {
             if parenIds.contains(i) && !parenIdsUsed.contains(i) {
                 expression.append(evaluate(code: parens[parenCount], space: space))
@@ -268,6 +282,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
                 expression.append("&&")
             }
         }
+        print(expression)
         for i in 0...expression.count-1 {
             if expression[i] == "<" {
                 if expression[i-1] < expression[i+1] {
@@ -924,11 +939,7 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) -> 
 }
 
 var code = """
-var d = "hi ";
-function do(a: String) {
-print(d+a);
-};
-do(a: "friend");
+print(!true || !false);
 """
 //Add other array functions (append, remove)
 globalSpace = run(code: code, space: globalSpace)
