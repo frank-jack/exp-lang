@@ -41,26 +41,72 @@ enum TypeValue {
     case Boolean
     case Array
     case Function
+    case Void
     case TypeError
 }
 
 struct Function {
     var params: [(name: String, type: TypeValue)]
     var code: String
+    var returnType: TypeValue
 }
 
-func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]) -> String {
+func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue, global: Bool)]) -> (value: String, space: [(name: String, value: Any, type: TypeValue, global: Bool)]) {
     if code.replacingOccurrences(of: " ", with: "").count == 0 {
-        return ""
+        return ("", space)
     }
     if getVarNames(space: space).contains(code) {
-        return evaluate(code: getValue(variable: code, space: space), space: space)
+        return (evaluate(code: getValue(variable: code, space: space), space: space).value, space)
     }
-    if code.components(separatedBy: "[").count-1 == 1 && code.components(separatedBy: "]").count-1 == 1 && getType(variable: evaluate(code: code.customReplace().components(separatedBy: "[")[0], space: space)) == TypeValue.String {
-        return "\""+String(evaluate(code: code.customReplace().components(separatedBy: "[")[0], space: space)[Int(code.components(separatedBy: "[")[1].dropLast(1))!+1])+"\""
+    if getFunctionNames(space: space).contains(where: code.customReplace().hasPrefix) && code.contains("(") && code.contains(")") && getFunction(funcName: code.customReplace().components(separatedBy: "(")[0], space: space).returnType != TypeValue.Void {
+        var localSpace = [(name: String, value: Any, type: TypeValue, global: Bool)]()
+        let funcName = code.customReplace().components(separatedBy: "(")[0]
+        let funcParam = code.customReplace().dropLast(1).components(separatedBy: "(")[1].components(separatedBy: ",")
+        if funcParam[0].count > 0 {
+            for i in funcParam {
+                if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: space).value) == TypeValue.String {
+                    localSpace.append((name: String(i.components(separatedBy: ":")[0]), value: evaluate(code: i.components(separatedBy: ":")[1], space: space).value, type: TypeValue.String, global: false))
+                } else if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: space).value) == TypeValue.Float {
+                    localSpace.append((name: i.components(separatedBy: ":")[0], value: Float(evaluate(code: i.components(separatedBy: ":")[1], space: space).value)!, type: TypeValue.Float, global: false))
+                } else if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: space).value) == TypeValue.Boolean {
+                    localSpace.append((name: i.components(separatedBy: ":")[0], value: evaluate(code: i.components(separatedBy: ":")[1], space: space).value, type: TypeValue.Boolean, global: false))
+                } else if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: space).value) == TypeValue.Array {
+                    localSpace.append((name: i.components(separatedBy: ":")[0], value: evaluate(code: i.components(separatedBy: ":")[1], space: space).value, type: TypeValue.Array, global: false))
+                }
+            }
+        }
+        let functionValue = getFunction(funcName: funcName, space: space)
+        var paramsValid = true
+        if functionValue.params.count > 1 {
+            for i in 0...functionValue.params.count-1 {
+                if functionValue.params[i].name != localSpace[i].name || functionValue.params[i].type != localSpace[i].type {
+                    paramsValid = false
+                }
+            }
+        }
+        if paramsValid {
+            for i in space {
+                if i.global {
+                    localSpace.append(i)
+                }
+            }
+            var newSpace = run(code: functionValue.code, space: localSpace, global: false).space
+            let tempCount = newSpace.count-1
+            for i in 0...tempCount {
+                if !newSpace[tempCount-i].global {
+                    newSpace.remove(at: tempCount-i)
+                }
+            }
+            if getType(variable: run(code: functionValue.code, space: localSpace, global: false).returnValue) == functionValue.returnType {
+                return (run(code: functionValue.code, space: localSpace, global: false).returnValue, newSpace)
+            }
+        }
     }
-    if code.contains("[") && code.contains("]") && getVarNames(space: space).contains(code.customReplace().components(separatedBy: "[")[0]) && getType(variable: evaluate(code: code.customReplace().components(separatedBy: "[")[0], space: space)) == TypeValue.Array {
-        var arr = evaluate(code: code.customReplace().components(separatedBy: "[")[0], space: space)
+    if code.components(separatedBy: "[").count-1 == 1 && code.components(separatedBy: "]").count-1 == 1 && getType(variable: evaluate(code: code.customReplace().components(separatedBy: "[")[0], space: space).value) == TypeValue.String {
+        return ("\""+String(evaluate(code: code.customReplace().components(separatedBy: "[")[0], space: space).value[Int(code.components(separatedBy: "[")[1].dropLast(1))!+1])+"\"", space)
+    }
+    if code.contains("[") && code.contains("]") && getVarNames(space: space).contains(code.customReplace().components(separatedBy: "[")[0]) && getType(variable: evaluate(code: code.customReplace().components(separatedBy: "[")[0], space: space).value) == TypeValue.Array {
+        var arr = evaluate(code: code.customReplace().components(separatedBy: "[")[0], space: space).value
         var finished = false
         var count = 1
         while !finished {
@@ -82,11 +128,11 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
             for i in 0...arrayItems.count-1 {
                 arrayItems[i] = arrayItems[i].replacingOccurrences(of: "\0", with: ",")
             }
-            if getType(variable: evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space)) != TypeValue.Array || count == code.components(separatedBy: "[").count-1 {
+            if getType(variable: evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space).value) != TypeValue.Array || count == code.components(separatedBy: "[").count-1 {
                 finished = true
-                return evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space)
+                return (evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space).value, space)
             } else {
-                arr = evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space)
+                arr = evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space).value
                 count+=1
             }
         }
@@ -117,7 +163,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
                 arr+="["+splitByBrackets[i]
             }
         }
-        arr = evaluate(code: arr, space: space)
+        arr = evaluate(code: arr, space: space).value
         var finished = false
         var count = leftBrackets+1
         while !finished {
@@ -139,11 +185,11 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
             for i in 0...arrayItems.count-1 {
                 arrayItems[i] = arrayItems[i].replacingOccurrences(of: "\0", with: ",")
             }
-            if getType(variable: evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space)) != TypeValue.Array || count == code.components(separatedBy: "[").count-1 {
+            if getType(variable: evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space).value) != TypeValue.Array || count == code.components(separatedBy: "[").count-1 {
                 finished = true
-                return evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space)
+                return (evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space).value, space)
             } else {
-                arr = evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space)
+                arr = evaluate(code: arrayItems[Int(code.components(separatedBy: "[")[count].dropLast(1))!], space: space).value
                 count+=1
             }
         }
@@ -168,7 +214,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
             arrayItems[i] = arrayItems[i].replacingOccurrences(of: "\0", with: ",")
         }
         for i in 0...arrayItems.count-1 {
-            arrayItems[i] = evaluate(code: arrayItems[i], space: space)
+            arrayItems[i] = evaluate(code: arrayItems[i], space: space).value
         }
         var output = "["
         for i in 0...arrayItems.count-1 {
@@ -178,22 +224,22 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
             }
         }
         output+="]"
-        return output
+        return (output, space)
     }
     if code.customReplace() == "true" || code.customReplace() == "false" {
-        return String(code.customReplace())
+        return (String(code.customReplace()), space)
     }
     if code.customReplace() == "!true" {
-        return "false"
+        return ("false", space)
     }
     if code.customReplace() == "!false" {
-        return "true"
+        return ("true", space)
     }
-    if code.customReplace()[0] == "!" && getType(variable: evaluate(code: String(code.customReplace().dropFirst(1)), space: space)) == TypeValue.Boolean && getVarNames(space: space).contains(String(code.customReplace().dropFirst(1))) {
-        if evaluate(code: String(code.customReplace().dropFirst(1)), space: space) == "true" {
-            return "false"
-        } else if evaluate(code: String(code.customReplace().dropFirst(1)), space: space) == "false" {
-            return "true"
+    if code.customReplace()[0] == "!" && getType(variable: evaluate(code: String(code.customReplace().dropFirst(1)), space: space).value) == TypeValue.Boolean && getVarNames(space: space).contains(String(code.customReplace().dropFirst(1))) {
+        if evaluate(code: String(code.customReplace().dropFirst(1)), space: space).value == "true" {
+            return ("false", space)
+        } else if evaluate(code: String(code.customReplace().dropFirst(1)), space: space).value == "false" {
+            return ("true", space)
         }
     }
     if code.contains("<") || code.contains(">") || code.contains("==") || code.contains("!=") || code.contains("||") || code.contains("&&") {
@@ -256,13 +302,12 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
         var expression = [String]()
         var parenCount = 0
         var valCount = 0
-        print(vals)
         for i in 0...code.count-1 {
             if parenIds.contains(i) && !parenIdsUsed.contains(i) {
-                expression.append(evaluate(code: parens[parenCount], space: space))
+                expression.append(evaluate(code: parens[parenCount], space: space).value)
                 parenCount+=1
             } else if valIds.contains(i) && !valIdsUsed.contains(i) && !parenIds.contains(i) {
-                expression.append(evaluate(code: vals[valCount], space: space))
+                expression.append(evaluate(code: vals[valCount], space: space).value)
                 valCount+=1
             } else if code[i] == ">" && code[i+1] == "=" && !parenIds.contains(i) {
                 expression.append(">=")
@@ -282,10 +327,9 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
                 expression.append("&&")
             }
         }
-        print(expression)
         for i in 0...expression.count-1 {
             if expression[i] == "<" {
-                if expression[i-1] < expression[i+1] {
+                if Float(expression[i-1])! < Float(expression[i+1])! {
                     expression[i] = "true"
                 } else {
                     expression[i] = "false"
@@ -293,7 +337,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
                 expression[i-1] = ""
                 expression[i+1] = ""
             } else if expression[i] == ">" {
-                if expression[i-1] > expression[i+1] {
+                if Float(expression[i-1])! > Float(expression[i+1])! {
                     expression[i] = "true"
                 } else {
                     expression[i] = "false"
@@ -309,7 +353,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
                 expression[i-1] = ""
                 expression[i+1] = ""
             } else if expression[i] == "<=" {
-                if expression[i-1] <= expression[i+1] {
+                if Float(expression[i-1])! <= Float(expression[i+1])! {
                     expression[i] = "true"
                 } else {
                     expression[i] = "false"
@@ -317,7 +361,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
                 expression[i-1] = ""
                 expression[i+1] = ""
             } else if expression[i] == ">=" {
-                if expression[i-1] >= expression[i+1] {
+                if Float(expression[i-1])! >= Float(expression[i+1])! {
                     expression[i] = "true"
                 } else {
                     expression[i] = "false"
@@ -357,26 +401,26 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
                 expression.removeAll { $0 == "" }
             }
         }
-        return expression[0]
+        return (expression[0], space)
     }
     if !code.contains("\"") && !code.contains("+") && !code.contains("-") && !code.contains("*") && !code.contains("/") && !code.contains("(") && !code.contains(")") && !code.isNumber && getType(variable: getValue(variable: code, space: space)) == TypeValue.Boolean {
-        return evaluate(code: getValue(variable: code.customReplace(), space: space), space: space)
+        return (evaluate(code: getValue(variable: code.customReplace(), space: space), space: space).value, space)
     }
     if !code.contains("\"") && !code.contains("+") && !code.contains("-") && !code.contains("*") && !code.contains("/") && !code.contains("(") && !code.contains(")") && code.customReplace().isNumber {
-        return code.customReplace()
+        return (code.customReplace(), space)
     } else if !code.contains("\"") && !code.contains("-") && !code.contains("*") && !code.contains("/") && !code.contains("(") && !code.contains(")") {
         var simpleAdds: Float = 0.0
         let splitByPlus = code.components(separatedBy: "+")
         var allNumbers = true
         for i in splitByPlus {
-            if evaluate(code: i.customReplace(), space: space).isNumber {
-                simpleAdds+=Float(evaluate(code: i.customReplace(), space: space))!
+            if evaluate(code: i.customReplace(), space: space).value.isNumber {
+                simpleAdds+=Float(evaluate(code: i.customReplace(), space: space).value)!
             } else {
                 allNumbers = false
             }
         }
         if allNumbers {
-            return String(simpleAdds)
+            return (String(simpleAdds), space)
         }
     }
     var isFloatExpression = false
@@ -423,7 +467,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
                 output = output+String(i)
             }
         }
-        return "\""+output+"\""
+        return ("\""+output+"\"", space)
     }
     var numbIds = [Int]()
     var parenIds = [Int]()
@@ -513,7 +557,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
     var varCount = 0
     for i in 0...code.count-1 {
         if parenIds.contains(i) && !parenIdsUsed.contains(i) {
-            expression.append(evaluate(code: parens[parenCount], space: space))
+            expression.append(evaluate(code: parens[parenCount], space: space).value)
             parenCount+=1
         } else if varIds.contains(i) && !varIdsUsed.contains(i) && !parenIds.contains(i) {
             expression.append((getValue(variable: vars[varCount], space: space) as AnyObject).description)
@@ -558,7 +602,7 @@ func evaluate(code: String, space: [(name: String, value: Any, type: TypeValue)]
         }
     }
     expression.removeAll { $0 == "" }
-    return expression[0]
+    return (expression[0], space)
 }
 
 func arrayReplaceHelper(arr: String, indexList: [Int], count: Int, newValue: String) -> String {
@@ -608,7 +652,7 @@ func arrayReplaceHelper(arr: String, indexList: [Int], count: Int, newValue: Str
     }
 }
 
-func getValue(variable: String, space: [(name: String, value: Any, type: TypeValue)]) -> String {
+func getValue(variable: String, space: [(name: String, value: Any, type: TypeValue, global: Bool)]) -> String {
     if let value = space.first(where: {variable == $0.name})?.value {
         if space.first(where: {variable == $0.name})?.type == TypeValue.String {
             return "\""+(value as AnyObject).description+"\""
@@ -619,22 +663,22 @@ func getValue(variable: String, space: [(name: String, value: Any, type: TypeVal
     }
 }
 
-func updateValue(variable: String, newValue: Any, space: [(name: String, value: Any, type: TypeValue)]) -> [(name: String, value: Any, type: TypeValue)] {
+func updateValue(variable: String, newValue: Any, space: [(name: String, value: Any, type: TypeValue, global: Bool)]) -> [(name: String, value: Any, type: TypeValue, global: Bool)] {
     var currentSpace = space
     let i = currentSpace.firstIndex(where: {variable == $0.name})
     currentSpace[i!].value = newValue
     return currentSpace
 }
 
-func getFunction(funcName: String, space: [(name: String, value: Any, type: TypeValue)]) -> Function {
+func getFunction(funcName: String, space: [(name: String, value: Any, type: TypeValue, global: Bool)]) -> Function {
     if let value = space.first(where: {funcName == $0.name})?.value {
         return value as! Function
     } else {
-        return Function(params: [(name: "", type: TypeValue.String)], code: "")
+        return Function(params: [(name: "", type: TypeValue.String)], code: "", returnType: TypeValue.Void)
     }
 }
 
-func getVarNamesWithEquals(space: [(name: String, value: Any, type: TypeValue)]) -> [String] {
+func getVarNamesWithEquals(space: [(name: String, value: Any, type: TypeValue, global: Bool)]) -> [String] {
     var output = [String]()
     for i in space {
         if i.type != TypeValue.Function {
@@ -644,7 +688,7 @@ func getVarNamesWithEquals(space: [(name: String, value: Any, type: TypeValue)])
     return output
 }
 
-func getVarNames(space: [(name: String, value: Any, type: TypeValue)]) -> [String] {
+func getVarNames(space: [(name: String, value: Any, type: TypeValue, global: Bool)]) -> [String] {
     var output = [String]()
     for i in space {
         if i.type != TypeValue.Function {
@@ -654,7 +698,7 @@ func getVarNames(space: [(name: String, value: Any, type: TypeValue)]) -> [Strin
     return output
 }
 
-func getFunctionNames(space: [(name: String, value: Any, type: TypeValue)]) -> [String] {
+func getFunctionNames(space: [(name: String, value: Any, type: TypeValue, global: Bool)]) -> [String] {
     var output = [String]()
     for i in space {
         if i.type == TypeValue.Function {
@@ -678,9 +722,9 @@ func getType(variable: String) -> TypeValue {
     }
 }
 
-var globalSpace = [(name: String, value: Any, type: TypeValue)]()
+var globalSpace = [(name: String, value: Any, type: TypeValue, global: Bool)]()
 
-func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) -> [(name: String, value: Any, type: TypeValue)] {
+func run(code: String, space: [(name: String, value: Any, type: TypeValue, global: Bool)], global: Bool) -> (space: [(name: String, value: Any, type: TypeValue, global: Bool)], returnValue: String) {
     var currentSpace = space
     var bracketIds = [Int]()
     var depth = 0
@@ -720,122 +764,181 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) -> 
         }
     }
     var bracketCount = 0
-    let simpleCode = codeWithoutBrackets.replacingOccurrences(of: "\n", with: "")
+    let simpleCode = codeWithoutBrackets.replacingOccurrences(of: "\n", with: "").replacingOccurrences(of: "\t", with: "")
     let sets = simpleCode.components(separatedBy: ";")
     for set in sets {
-        if set.hasPrefix("var ") && getType(variable: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace)) == TypeValue.Float {
+        if set.hasPrefix("var ") && getType(variable: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).value) == TypeValue.Float {
             let name = set.dropFirst(4).components(separatedBy: "=")[0].customReplace()
             if getVarNames(space: currentSpace).contains(name) {
-                currentSpace = updateValue(variable: name, newValue: Float(evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace))!, space: currentSpace)
+                currentSpace = updateValue(variable: name, newValue: Float(evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).value)!, space: currentSpace)
+                currentSpace = evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).space
             } else {
-                currentSpace.append((name: name, value: Float(evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace))!, type: TypeValue.Float))
+                currentSpace.append((name: name, value: Float(evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).value)!, type: TypeValue.Float, global: global))
+                currentSpace = evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).space
             }
-        } else if set.hasPrefix("var ") && getType(variable: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace)) == TypeValue.String {
+        } else if set.hasPrefix("var ") && getType(variable: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).value) == TypeValue.String {
             let name = set.dropFirst(4).components(separatedBy: "=")[0].customReplace()
             if getVarNames(space: currentSpace).contains(name) {
-                currentSpace = updateValue(variable: name, newValue: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).dropFirst(1).dropLast(1), space: currentSpace)
+                currentSpace = updateValue(variable: name, newValue: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).value.dropFirst(1).dropLast(1), space: currentSpace)
+                currentSpace = evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).space
             } else {
-                currentSpace.append((name: name, value: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).dropFirst(1).dropLast(1), type: TypeValue.String))
+                currentSpace.append((name: name, value: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).value.dropFirst(1).dropLast(1), type: TypeValue.String, global: global))
+                currentSpace = evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).space
             }
-        } else if set.hasPrefix("var ") && getType(variable: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace)) == TypeValue.Boolean {
-            let name = set.dropFirst(4).components(separatedBy: "=")[0].customReplace()
-            if getVarNames(space: currentSpace).contains(name) {
-                currentSpace = updateValue(variable: name, newValue: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace), space: currentSpace)
-            } else {
-                currentSpace.append((name: name, value: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace), type: TypeValue.Boolean))
-            }
-        } else if set.hasPrefix("var ") && getType(variable: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace)) == TypeValue.Array {
+        } else if set.hasPrefix("var ") && getType(variable: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).value) == TypeValue.Boolean {
             let name = set.dropFirst(4).components(separatedBy: "=")[0].customReplace()
             if getVarNames(space: currentSpace).contains(name) {
                 currentSpace = updateValue(variable: name, newValue: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace), space: currentSpace)
+                currentSpace = evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).space
             } else {
-                currentSpace.append((name: name, value: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace), type: TypeValue.Array))
+                currentSpace.append((name: name, value: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace), type: TypeValue.Boolean, global: global))
+                currentSpace = evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).space
             }
-        } else if set.hasPrefix("print(") && set[set.count-1] == ")" {
-            if getType(variable: evaluate(code: String(set.dropFirst(6).dropLast(1)), space: currentSpace)) == TypeValue.Float {
-                print(Float(evaluate(code: String(set.dropFirst(6).dropLast(1)), space: currentSpace))!)
-            } else if getType(variable: evaluate(code: String(set.dropFirst(6).dropLast(1)), space: currentSpace)) == TypeValue.String {
-                print(evaluate(code: String(set.dropFirst(6).dropLast(1)), space: currentSpace).dropFirst(1).dropLast(1))
-            } else if getType(variable: evaluate(code: String(set.dropFirst(6).dropLast(1)), space: currentSpace)) == TypeValue.Boolean {
-                print(evaluate(code: String(set.dropFirst(6).dropLast(1)), space: currentSpace))
-            } else if getType(variable: evaluate(code: String(set.dropFirst(6).dropLast(1)), space: currentSpace)) == TypeValue.Array {
-                print(evaluate(code: String(set.dropFirst(6).dropLast(1)), space: currentSpace))
+        } else if set.hasPrefix("var ") && getType(variable: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).value) == TypeValue.Array {
+            let name = set.dropFirst(4).components(separatedBy: "=")[0].customReplace()
+            if getVarNames(space: currentSpace).contains(name) {
+                currentSpace = updateValue(variable: name, newValue: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace), space: currentSpace)
+                currentSpace = evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).space
+            } else {
+                currentSpace.append((name: name, value: evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace), type: TypeValue.Array, global: global))
+                currentSpace = evaluate(code: set.dropFirst(4).components(separatedBy: "=")[1], space: currentSpace).space
+            }
+        } else if set.customReplace().hasPrefix("print(") && set[set.count-1] == ")" {
+            if getType(variable: evaluate(code: String(set.customReplace().dropFirst(6).dropLast(1)), space: currentSpace).value) == TypeValue.Float {
+                print(Float(evaluate(code: String(set.customReplace().dropFirst(6).dropLast(1)), space: currentSpace).value)!)
+                currentSpace = evaluate(code: String(set.customReplace().dropFirst(6).dropLast(1)), space: currentSpace).space
+            } else if getType(variable: evaluate(code: String(set.customReplace().dropFirst(6).dropLast(1)), space: currentSpace).value) == TypeValue.String {
+                print(evaluate(code: String(set.customReplace().dropFirst(6).dropLast(1)), space: currentSpace).value.dropFirst(1).dropLast(1))
+                currentSpace = evaluate(code: String(set.customReplace().dropFirst(6).dropLast(1)), space: currentSpace).space
+            } else if getType(variable: evaluate(code: String(set.customReplace().dropFirst(6).dropLast(1)), space: currentSpace).value) == TypeValue.Boolean {
+                print(evaluate(code: String(set.customReplace().dropFirst(6).dropLast(1)), space: currentSpace).value)
+                currentSpace = evaluate(code: String(set.customReplace().dropFirst(6).dropLast(1)), space: currentSpace).space
+            } else if getType(variable: evaluate(code: String(set.customReplace().dropFirst(6).dropLast(1)), space: currentSpace).value) == TypeValue.Array {
+                print(evaluate(code: String(set.customReplace().dropFirst(6).dropLast(1)), space: currentSpace).value)
+                currentSpace = evaluate(code: String(set.customReplace().dropFirst(6).dropLast(1)), space: currentSpace).space
             }
         } else if set.hasPrefix("function ") && set.contains("(") && set.customReplace().hasSuffix("){}") {
             let funcName = set.dropFirst(9).components(separatedBy: "(")[0]
             let funcParam = set.customReplace().dropFirst(9+funcName.count).dropLast(3).components(separatedBy: ",")
             var funcParamSplit = [(name: String, type: TypeValue)]()
-            for i in funcParam {
-                if i.components(separatedBy: ":")[1] == "String" {
-                    funcParamSplit.append((name: i.components(separatedBy: ":")[0], type: TypeValue.String))
-                } else if i.components(separatedBy: ":")[1] == "Float" {
-                    funcParamSplit.append((name: i.components(separatedBy: ":")[0], type: TypeValue.Float))
-                } else if i.components(separatedBy: ":")[1] == "Boolean" {
-                    funcParamSplit.append((name: i.components(separatedBy: ":")[0], type: TypeValue.Boolean))
-                } else if i.components(separatedBy: ":")[1] == "Array" {
-                    funcParamSplit.append((name: i.components(separatedBy: ":")[0], type: TypeValue.Array))
+            if funcParam[0].count > 0 {
+                for i in funcParam {
+                    if i.components(separatedBy: ":")[1] == "String" {
+                        funcParamSplit.append((name: i.components(separatedBy: ":")[0], type: TypeValue.String))
+                    } else if i.components(separatedBy: ":")[1] == "Float" {
+                        funcParamSplit.append((name: i.components(separatedBy: ":")[0], type: TypeValue.Float))
+                    } else if i.components(separatedBy: ":")[1] == "Boolean" {
+                        funcParamSplit.append((name: i.components(separatedBy: ":")[0], type: TypeValue.Boolean))
+                    } else if i.components(separatedBy: ":")[1] == "Array" {
+                        funcParamSplit.append((name: i.components(separatedBy: ":")[0], type: TypeValue.Array))
+                    }
                 }
             }
-            currentSpace.append((name: funcName, value: Function(params: funcParamSplit, code: brackets[bracketCount]), type: TypeValue.Function))
+            currentSpace.append((name: funcName, value: Function(params: funcParamSplit, code: brackets[bracketCount], returnType: TypeValue.Void), type: TypeValue.Function, global: global))
+            bracketCount+=1
+        } else if set.hasPrefix("function ") && set.contains("(") && set.customReplace().contains("->") && set.customReplace().hasSuffix("{}") {
+            let funcName = set.dropFirst(9).components(separatedBy: "(")[0]
+            let funcParam = set.customReplace().dropFirst(9+funcName.count).dropLast(set.customReplace().components(separatedBy: "->")[1].dropLast(2).count+5).components(separatedBy: ",")
+            var returnType = TypeValue.Void
+            if String(set.customReplace().components(separatedBy: "->")[1].dropLast(2)) == "String" {
+                returnType = TypeValue.String
+            } else if String(set.customReplace().components(separatedBy: "->")[1].dropLast(2)) == "Float" {
+                returnType = TypeValue.Float
+            } else if String(set.customReplace().components(separatedBy: "->")[1].dropLast(2)) == "Boolean" {
+                returnType = TypeValue.Boolean
+            } else if String(set.customReplace().components(separatedBy: "->")[1].dropLast(2)) == "Array" {
+                returnType = TypeValue.Array
+            }
+            var funcParamSplit = [(name: String, type: TypeValue)]()
+            if funcParam[0].count > 0 {
+                for i in funcParam {
+                    if i.components(separatedBy: ":")[1] == "String" {
+                        funcParamSplit.append((name: i.components(separatedBy: ":")[0], type: TypeValue.String))
+                    } else if i.components(separatedBy: ":")[1] == "Float" {
+                        funcParamSplit.append((name: i.components(separatedBy: ":")[0], type: TypeValue.Float))
+                    } else if i.components(separatedBy: ":")[1] == "Boolean" {
+                        funcParamSplit.append((name: i.components(separatedBy: ":")[0], type: TypeValue.Boolean))
+                    } else if i.components(separatedBy: ":")[1] == "Array" {
+                        funcParamSplit.append((name: i.components(separatedBy: ":")[0], type: TypeValue.Array))
+                    }
+                }
+            }
+            currentSpace.append((name: funcName, value: Function(params: funcParamSplit, code: brackets[bracketCount], returnType: returnType), type: TypeValue.Function, global: global))
             bracketCount+=1
         } else if getVarNamesWithEquals(space: currentSpace).contains(where: set.customReplace().hasPrefix) {
-            if getType(variable: evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace)) == TypeValue.Float {
-                let newValue = Float(evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace))
+            if getType(variable: evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).value) == TypeValue.Float {
+                let newValue = Float(evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).value)
                 let variable = set.components(separatedBy: "=")[0].customReplace()
                 currentSpace = updateValue(variable: variable, newValue: newValue!, space: currentSpace)
-            } else if getType(variable: evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace)) == TypeValue.String {
-                let newValue = evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).dropFirst(1).dropLast(1)
+                currentSpace = evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).space
+            } else if getType(variable: evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).value) == TypeValue.String {
+                let newValue = evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).value.dropFirst(1).dropLast(1)
                 let variable = set.components(separatedBy: "=")[0].customReplace()
                 currentSpace = updateValue(variable: variable, newValue: newValue, space: currentSpace)
-            } else if getType(variable: evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace)) == TypeValue.Boolean {
-                let newValue = evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace)
+                currentSpace = evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).space
+            } else if getType(variable: evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).value) == TypeValue.Boolean {
+                let newValue = evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).value
                 let variable = set.components(separatedBy: "=")[0].customReplace()
                 currentSpace = updateValue(variable: variable, newValue: newValue, space: currentSpace)
-            } else if getType(variable: evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace)) == TypeValue.Array {
-                let newValue = evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace)
+                currentSpace = evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).space
+            } else if getType(variable: evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).value) == TypeValue.Array {
+                let newValue = evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).value
                 let variable = set.components(separatedBy: "=")[0].customReplace()
                 currentSpace = updateValue(variable: variable, newValue: newValue, space: currentSpace)
+                currentSpace = evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).space
             }
         } else if getFunctionNames(space: currentSpace).contains(where: set.customReplace().hasPrefix) && set.contains("(") && set.contains(")") {
-            var localSpace = [(name: String, value: Any, type: TypeValue)]()
+            var localSpace = [(name: String, value: Any, type: TypeValue, global: Bool)]()
             let funcName = set.customReplace().components(separatedBy: "(")[0]
             let funcParam = set.customReplace().dropLast(1).components(separatedBy: "(")[1].components(separatedBy: ",")
-            for i in funcParam {
-                if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace)) == TypeValue.String {
-                    localSpace.append((name: String(i.components(separatedBy: ":")[0]), value: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace), type: TypeValue.String))
-                } else if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace)) == TypeValue.Float {
-                    localSpace.append((name: i.components(separatedBy: ":")[0], value: Float(evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace))!, type: TypeValue.Float))
-                } else if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace)) == TypeValue.Boolean {
-                    localSpace.append((name: i.components(separatedBy: ":")[0], value: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace), type: TypeValue.Boolean))
-                } else if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace)) == TypeValue.Array {
-                    localSpace.append((name: i.components(separatedBy: ":")[0], value: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace), type: TypeValue.Array))
+            if funcParam[0].count > 0 {
+                for i in funcParam {
+                    if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace).value) == TypeValue.String {
+                        localSpace.append((name: String(i.components(separatedBy: ":")[0]), value: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace).value, type: TypeValue.String, global: false))
+                    } else if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace).value) == TypeValue.Float {
+                        localSpace.append((name: i.components(separatedBy: ":")[0], value: Float(evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace).value)!, type: TypeValue.Float, global: false))
+                    } else if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace).value) == TypeValue.Boolean {
+                        localSpace.append((name: i.components(separatedBy: ":")[0], value: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace).value, type: TypeValue.Boolean, global: false))
+                    } else if getType(variable: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace).value) == TypeValue.Array {
+                        localSpace.append((name: i.components(separatedBy: ":")[0], value: evaluate(code: i.components(separatedBy: ":")[1], space: currentSpace).value, type: TypeValue.Array, global: false))
+                    }
                 }
             }
             let functionValue = getFunction(funcName: funcName, space: currentSpace)
             var paramsValid = true
-            for i in 0...functionValue.params.count-1 {
-                if functionValue.params[i].name != localSpace[i].name || functionValue.params[i].type != localSpace[i].type {
-                    paramsValid = false
+            if functionValue.params.count > 1 {
+                for i in 0...functionValue.params.count-1 {
+                    if functionValue.params[i].name != localSpace[i].name || functionValue.params[i].type != localSpace[i].type {
+                        paramsValid = false
+                    }
                 }
             }
             if paramsValid {
                 for i in currentSpace {
                     localSpace.append(i)
                 }
-                let returnedSpace = run(code: functionValue.code, space: localSpace)
+                currentSpace = run(code: functionValue.code, space: localSpace, global: false).space
+                let tempCount = currentSpace.count-1
+                for i in 0...currentSpace.count-1 {
+                    if !currentSpace[tempCount-i].global {
+                        currentSpace.remove(at: tempCount-i)
+                    }
+                }
             }
-        } else if set.customReplace().hasPrefix("if(") && getType(variable: evaluate(code: String(set.customReplace().dropFirst(3).components(separatedBy: "{")[0].dropLast(1)), space: currentSpace)) == TypeValue.Boolean {
+        } else if set.customReplace().hasPrefix("return") {
+            return (currentSpace, evaluate(code: String(set.customReplace().dropFirst(6)), space: currentSpace).value)
+        } else if set.customReplace().hasPrefix("if(") && getType(variable: evaluate(code: String(set.customReplace().dropFirst(3).components(separatedBy: "{")[0].dropLast(1)), space: currentSpace).value) == TypeValue.Boolean {
             var finished = false
-            if evaluate(code: String(set.customReplace().dropFirst(3).components(separatedBy: "{")[0].dropLast(1)), space: currentSpace) == "true" {
-                currentSpace = run(code: brackets[bracketCount], space: currentSpace)
+            if evaluate(code: String(set.customReplace().dropFirst(3).components(separatedBy: "{")[0].dropLast(1)), space: currentSpace).value == "true" {
+                currentSpace = run(code: brackets[bracketCount], space: currentSpace, global: global).space
                 bracketCount+=1
                 finished = true
             } else {
                 bracketCount+=1
                 if set.contains("elif") {
                     for i in 1...set.components(separatedBy: "elif").count-1 {
-                        if !finished && evaluate(code: String(set.customReplace().components(separatedBy: "elif")[i].dropFirst(1).components(separatedBy: "{")[0].dropLast(1)), space: currentSpace) == "true" {
-                            currentSpace = run(code: brackets[bracketCount], space: currentSpace)
+                        if !finished && evaluate(code: String(set.customReplace().components(separatedBy: "elif")[i].dropFirst(1).components(separatedBy: "{")[0].dropLast(1)), space: currentSpace).value == "true" {
+                            currentSpace = run(code: brackets[bracketCount], space: currentSpace, global: global).space
                             bracketCount+=1
                             finished = true
                         } else {
@@ -844,26 +947,26 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) -> 
                     }
                 }
                 if set.contains("else") && !finished {
-                    currentSpace = run(code: brackets[bracketCount], space: currentSpace)
+                    currentSpace = run(code: brackets[bracketCount], space: currentSpace, global: global).space
                     bracketCount+=1
                 }
             }
         } else if getVarNames(space: currentSpace).contains(where: set.customReplace().components(separatedBy: "[")[0].hasPrefix) {
-            if getType(variable: evaluate(code: set.customReplace().components(separatedBy: "[")[0], space: currentSpace)) == TypeValue.String {
-                let oldValue = evaluate(code: set.customReplace().components(separatedBy: "[")[0], space: currentSpace).dropFirst(1).dropLast(1)
-                let index = Int(evaluate(code: String(set.customReplace().components(separatedBy: "=")[0].components(separatedBy: "[")[1].dropLast(1)), space: currentSpace))!
+            if getType(variable: evaluate(code: set.customReplace().components(separatedBy: "[")[0], space: currentSpace).value) == TypeValue.String {
+                let oldValue = evaluate(code: set.customReplace().components(separatedBy: "[")[0], space: currentSpace).value.dropFirst(1).dropLast(1)
+                let index = Int(evaluate(code: String(set.customReplace().components(separatedBy: "=")[0].components(separatedBy: "[")[1].dropLast(1)), space: currentSpace).value)!
                 var newValue = ""
                 for i in 0...oldValue.count-1 {
                     if i != index {
                         newValue+=String(oldValue[i])
                     } else {
-                        newValue+=evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).dropFirst(1).dropLast(1)
+                        newValue+=evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).value.dropFirst(1).dropLast(1)
                     }
                 }
                 let variable = set.components(separatedBy: "[")[0].customReplace()
                 currentSpace = updateValue(variable: variable, newValue: newValue, space: currentSpace)
-            } else if getType(variable: evaluate(code: set.customReplace().components(separatedBy: "[")[0], space: currentSpace)) == TypeValue.Array {
-                let layers = set.customReplace().components(separatedBy: "=")[0].components(separatedBy: "[").count-1
+                currentSpace = evaluate(code: set.customReplace().components(separatedBy: "[")[0], space: currentSpace).space
+            } else if getType(variable: evaluate(code: set.customReplace().components(separatedBy: "[")[0], space: currentSpace).value) == TypeValue.Array {
                 var indexList = set.customReplace().components(separatedBy: "=")[0].components(separatedBy: "[")
                 indexList.remove(at: 0)
                 for i in 0...indexList.count-1 {
@@ -873,8 +976,8 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) -> 
                 for i in indexList {
                     intIndexList.append(Int(i)!)
                 }
-                let arr = evaluate(code: set.customReplace().components(separatedBy: "[")[0], space: currentSpace)
-                let newValue = arrayReplaceHelper(arr: arr, indexList: intIndexList, count: 0, newValue: String(evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace)))
+                let arr = evaluate(code: set.customReplace().components(separatedBy: "[")[0], space: currentSpace).value
+                let newValue = arrayReplaceHelper(arr: arr, indexList: intIndexList, count: 0, newValue: String(evaluate(code: set.components(separatedBy: "=")[1], space: currentSpace).value))
                 let variable = set.components(separatedBy: "[")[0].customReplace()
                 currentSpace = updateValue(variable: variable, newValue: newValue, space: currentSpace)
             }
@@ -882,19 +985,19 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) -> 
             let newVarName = set.components(separatedBy: " in ")[0].customReplace().dropFirst(4)
             var range = [String]()
             if set.contains("...") {
-                let lowerBound = Int(evaluate(code: set.components(separatedBy: " in ")[1].components(separatedBy: "...")[0].customReplace(), space: currentSpace))!
-                let upperBound = Int(evaluate(code: String(set.components(separatedBy: " in ")[1].components(separatedBy: "...")[1].customReplace().dropLast(3)), space: currentSpace))!
+                let lowerBound = Int(evaluate(code: set.components(separatedBy: " in ")[1].components(separatedBy: "...")[0].customReplace(), space: currentSpace).value)!
+                let upperBound = Int(evaluate(code: String(set.components(separatedBy: " in ")[1].components(separatedBy: "...")[1].customReplace().dropLast(3)), space: currentSpace).value)!
                 for i in lowerBound...upperBound {
                     range.append(String(i))
                 }
-            } else if getType(variable: evaluate(code: String(set.components(separatedBy: " in ")[1].customReplace().dropLast(3)), space: currentSpace)) == TypeValue.String {
-                for i in evaluate(code: String(set.components(separatedBy: " in ")[1].customReplace().dropLast(3)), space: currentSpace) {
+            } else if getType(variable: evaluate(code: String(set.components(separatedBy: " in ")[1].customReplace().dropLast(3)), space: currentSpace).value) == TypeValue.String {
+                for i in evaluate(code: String(set.components(separatedBy: " in ")[1].customReplace().dropLast(3)), space: currentSpace).value {
                     range.append(String(i))
                 }
                 range.removeFirst()
                 range.removeLast()
-            } else if getType(variable: evaluate(code: String(set.components(separatedBy: " in ")[1].customReplace().dropLast(3)), space: currentSpace)) == TypeValue.Array {
-                let arr = evaluate(code: String(set.components(separatedBy: " in ")[1].customReplace().dropLast(3)), space: currentSpace)
+            } else if getType(variable: evaluate(code: String(set.components(separatedBy: " in ")[1].customReplace().dropLast(3)), space: currentSpace).value) == TypeValue.Array {
+                let arr = evaluate(code: String(set.components(separatedBy: " in ")[1].customReplace().dropLast(3)), space: currentSpace).value
                 var editedCode = ""
                 var depth = 0
                 for i in 0...arr.count-1 {
@@ -918,28 +1021,33 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue)]) -> 
                 }
             }
             for i in range {
-                if getType(variable: evaluate(code: i, space: currentSpace)) == TypeValue.String && i.count > 1 {
-                    currentSpace.append((name: String(newVarName), value: i.dropFirst(1).dropLast(1), type: getType(variable: evaluate(code: i, space: currentSpace))))
+                if getType(variable: evaluate(code: i, space: currentSpace).value) == TypeValue.String && i.count > 1 {
+                    currentSpace.append((name: String(newVarName), value: i.dropFirst(1).dropLast(1), type: getType(variable: evaluate(code: i, space: currentSpace).value), global: global))
                 } else {
-                    currentSpace.append((name: String(newVarName), value: i, type: getType(variable: evaluate(code: i, space: currentSpace))))
+                    currentSpace.append((name: String(newVarName), value: i, type: getType(variable: evaluate(code: i, space: currentSpace).value), global: global))
                 }
-                currentSpace = run(code: brackets[bracketCount], space: currentSpace)
+                currentSpace = run(code: brackets[bracketCount], space: currentSpace, global: global).space
                 currentSpace.removeAll { $0.name == newVarName }
             }
             bracketCount+=1
-        } else if set.customReplace().hasPrefix("while(") && getType(variable: evaluate(code: String(set.customReplace().dropFirst(6).dropLast(3)), space: currentSpace)) == TypeValue.Boolean {
-            while evaluate(code: String(set.customReplace().dropFirst(6).dropLast(3)), space: currentSpace) == "true" {
-                currentSpace = run(code: brackets[bracketCount], space: currentSpace)
+        } else if set.customReplace().hasPrefix("while(") && getType(variable: evaluate(code: String(set.customReplace().dropFirst(6).dropLast(3)), space: currentSpace).value) == TypeValue.Boolean {
+            while evaluate(code: String(set.customReplace().dropFirst(6).dropLast(3)), space: currentSpace).value == "true" {
+                currentSpace = run(code: brackets[bracketCount], space: currentSpace, global: global).space
             }
             bracketCount+=1
             
         }
     }
-    return currentSpace
+    return (currentSpace, "\0")
 }
 
 var code = """
-print(!true || !false);
+
 """
-//Add other array functions (append, remove)
-globalSpace = run(code: code, space: globalSpace)
+//Add other array functions (append, remove) and concatinate arrays
+//Ability to cast
+//Store return of functions better for recursion
+//Throw errors?
+globalSpace = run(code: code, space: globalSpace, global: true).space
+
+
