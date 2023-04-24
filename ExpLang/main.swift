@@ -1042,7 +1042,15 @@ func run(code: String, space: [(name: String, value: Any, type: TypeValue, globa
 }
 
 var code = """
-
+function do(a: Float) -> Float {
+ print(a);
+ if(a < 10) {
+     return do(a:a+1);
+ } else {
+     return a;
+ };
+};
+print(do(a: 0));
 """
 //Add other array functions (append, remove) and concatinate arrays
 //Ability to cast
